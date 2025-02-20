@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { restrictToParentElement } from '@dnd-kit/modifiers';
-import { Image as ImageIcon, Type, Square, Circle, ArrowRight, MinusSquare, PlusSquare } from 'lucide-react';
+import { Image as ImageIcon, Type, Square, Circle, ArrowRight, RotateCw, Move } from 'lucide-react';
 import type { Shape } from '../types';
 
 interface ImageEditorProps {
@@ -9,6 +9,12 @@ interface ImageEditorProps {
   onShapesChange: (shapes: Shape[]) => void;
   onImageChange: (image: string) => void;
 }
+
+// A4 dimensions in pixels at 96 DPI
+const A4_WIDTH = 794;
+const A4_HEIGHT = 1123;
+const EDITOR_HEIGHT = Math.round(A4_HEIGHT / 2);
+const EDITOR_WIDTH = A4_WIDTH;
 
 function DraggableShape({ shape, onUpdate, selected, onSelect }: {
   shape: Shape;
@@ -21,15 +27,86 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
   });
 
   const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0) rotate(${shape.rotation}deg) scale(${shape.scale})`,
+  } : {
+    transform: `rotate(${shape.rotation}deg) scale(${shape.scale})`,
+  };
 
-  const handleScale = (increase: boolean) => {
-    const scaleFactor = increase ? 1.2 : 0.8;
-    onUpdate(shape.id, {
-      width: shape.width * scaleFactor,
-      height: shape.height * scaleFactor,
-    });
+  const handleRotate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const element = e.currentTarget.parentElement;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const angle = Math.atan2(
+        moveEvent.clientY - centerY,
+        moveEvent.clientX - centerX
+      ) * (180 / Math.PI);
+      onUpdate(shape.id, { rotation: angle });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleResize = (e: React.MouseEvent, corner: string) => {
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = shape.width;
+    const startHeight = shape.height;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      
+      switch (corner) {
+        case 'se':
+          newWidth = Math.max(20, startWidth + deltaX);
+          newHeight = Math.max(20, startHeight + deltaY);
+          break;
+        case 'sw':
+          newWidth = Math.max(20, startWidth - deltaX);
+          newHeight = Math.max(20, startHeight + deltaY);
+          onUpdate(shape.id, { x: shape.x + startWidth - newWidth });
+          break;
+        case 'ne':
+          newWidth = Math.max(20, startWidth + deltaX);
+          newHeight = Math.max(20, startHeight - deltaY);
+          onUpdate(shape.id, { y: shape.y + startHeight - newHeight });
+          break;
+        case 'nw':
+          newWidth = Math.max(20, startWidth - deltaX);
+          newHeight = Math.max(20, startHeight - deltaY);
+          onUpdate(shape.id, { 
+            x: shape.x + startWidth - newWidth,
+            y: shape.y + startHeight - newHeight
+          });
+          break;
+      }
+
+      onUpdate(shape.id, { width: newWidth, height: newHeight });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   return (
@@ -40,6 +117,7 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
         top: shape.y,
         width: shape.width,
         height: shape.height,
+        transformOrigin: 'center center',
         cursor: 'move',
         ...style,
       }}
@@ -55,12 +133,16 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
         <textarea
           value={shape.text || ''}
           onChange={(e) => onUpdate(shape.id, { text: e.target.value })}
-          className="w-full h-full p-1 bg-transparent border-none resize-none focus:outline-none"
+          className="w-full h-full p-1 bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
           style={{ 
             color: shape.color,
             fontSize: `${shape.fontSize || 14}px`,
+            cursor: 'text',
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
         />
       ) : (
         <svg width="100%" height="100%" viewBox="0 0 100 100">
@@ -75,42 +157,55 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
       )}
 
       {selected && (
-        <div className="absolute -right-20 top-0 bg-white shadow-md rounded p-1 flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handleScale(false)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Diminuir"
-            >
-              <MinusSquare className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleScale(true)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Aumentar"
-            >
-              <PlusSquare className="w-4 h-4" />
-            </button>
+        <>
+          {/* Rotation handle */}
+          <div
+            className="absolute w-6 h-6 bg-white border-2 border-blue-500 rounded-full cursor-pointer -top-8 left-1/2 transform -translate-x-1/2 flex items-center justify-center"
+            onMouseDown={handleRotate}
+          >
+            <RotateCw className="w-4 h-4 text-blue-500" />
           </div>
-          <input
-            type="color"
-            value={shape.color}
-            onChange={(e) => onUpdate(shape.id, { color: e.target.value })}
-            className="w-5 h-5 cursor-pointer"
-            title="Cor"
+
+          {/* Resize handles */}
+          <div
+            className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-nw-resize -top-1.5 -left-1.5"
+            onMouseDown={(e) => handleResize(e, 'nw')}
           />
-          {shape.type === 'text' && (
+          <div
+            className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-ne-resize -top-1.5 -right-1.5"
+            onMouseDown={(e) => handleResize(e, 'ne')}
+          />
+          <div
+            className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-sw-resize -bottom-1.5 -left-1.5"
+            onMouseDown={(e) => handleResize(e, 'sw')}
+          />
+          <div
+            className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-se-resize -bottom-1.5 -right-1.5"
+            onMouseDown={(e) => handleResize(e, 'se')}
+          />
+
+          {/* Controls */}
+          <div className="absolute -right-20 top-0 bg-white shadow-md rounded p-1 flex flex-col gap-1">
             <input
-              type="number"
-              value={shape.fontSize || 14}
-              onChange={(e) => onUpdate(shape.id, { fontSize: Number(e.target.value) })}
-              className="w-12 text-xs p-0.5"
-              min="8"
-              max="72"
-              title="Tamanho da fonte"
+              type="color"
+              value={shape.color}
+              onChange={(e) => onUpdate(shape.id, { color: e.target.value })}
+              className="w-5 h-5 cursor-pointer"
+              title="Cor"
             />
-          )}
-        </div>
+            {shape.type === 'text' && (
+              <input
+                type="number"
+                value={shape.fontSize || 14}
+                onChange={(e) => onUpdate(shape.id, { fontSize: Number(e.target.value) })}
+                className="w-12 text-xs p-0.5"
+                min="8"
+                max="72"
+                title="Tamanho da fonte"
+              />
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -119,7 +214,10 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
 function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps) {
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [imageRotation, setImageRotation] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
   
   const { setNodeRef } = useDroppable({ id: 'canvas' });
 
@@ -142,9 +240,38 @@ function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps
         const imageUrl = e.target?.result as string;
         setBackgroundImage(imageUrl);
         onImageChange(imageUrl);
+        setImageRotation(0);
+        setImageScale(1);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleImageRotate = () => {
+    setImageRotation((prev) => (prev + 90) % 360);
+  };
+
+  const handleImageResize = (e: React.MouseEvent, direction: string) => {
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startScale = imageScale;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+      const newScale = Math.max(0.1, startScale + delta / 200);
+      setImageScale(newScale);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   const addShape = (type: string) => {
@@ -161,6 +288,8 @@ function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps
       color: '#000000',
       text: type === 'text' ? 'Texto' : '',
       fontSize: 14,
+      rotation: 0,
+      scale: 1,
     };
     onShapesChange([...shapes, newShape]);
     setSelectedShape(newShape);
@@ -204,6 +333,18 @@ function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps
         >
           <ArrowRight className="w-4 h-4" />
         </button>
+
+        {backgroundImage && (
+          <div className="flex items-center gap-2 ml-4">
+            <button
+              onClick={handleImageRotate}
+              className="p-1.5 hover:bg-gray-100 rounded"
+              title="Rotacionar imagem"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       <input
@@ -220,15 +361,46 @@ function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps
       >
         <div
           ref={setNodeRef}
-          className="relative w-full h-[300px] border border-dashed border-gray-300 rounded-lg overflow-hidden"
-          style={backgroundImage ? {
-            backgroundImage: `url(${backgroundImage})`,
-            backgroundSize: 'contain',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          } : undefined}
+          className="relative mx-auto border border-dashed border-gray-300 rounded-lg overflow-hidden"
+          style={{
+            width: EDITOR_WIDTH,
+            height: EDITOR_HEIGHT,
+          }}
           onClick={() => setSelectedShape(null)}
         >
+          {backgroundImage && (
+            <div
+              ref={imageRef}
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `url(${backgroundImage})`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                transform: `rotate(${imageRotation}deg) scale(${imageScale})`,
+                transformOrigin: 'center center',
+              }}
+            >
+              {/* Image resize handles */}
+              <div
+                className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-nw-resize top-0 left-0"
+                onMouseDown={(e) => handleImageResize(e, 'nw')}
+              />
+              <div
+                className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-ne-resize top-0 right-0"
+                onMouseDown={(e) => handleImageResize(e, 'ne')}
+              />
+              <div
+                className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-sw-resize bottom-0 left-0"
+                onMouseDown={(e) => handleImageResize(e, 'sw')}
+              />
+              <div
+                className="absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-sm cursor-se-resize bottom-0 right-0"
+                onMouseDown={(e) => handleImageResize(e, 'se')}
+              />
+            </div>
+          )}
+
           {shapes.map((shape) => (
             <DraggableShape
               key={shape.id}

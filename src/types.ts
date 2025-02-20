@@ -40,11 +40,15 @@ export interface Shape {
   text?: string;
   textColor?: string;
   fontSize?: number;
+  rotation: number;
+  scale: number;
 }
 
 export interface TechnicalSheetPage {
   id: string;
   image?: string;
+  imageRotation?: number;
+  imageScale?: number;
   shapes: Shape[];
   measurements: Measurement[];
 }
