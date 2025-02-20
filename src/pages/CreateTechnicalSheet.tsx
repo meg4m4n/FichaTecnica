@@ -75,6 +75,7 @@ function CreateTechnicalSheet() {
       id: crypto.randomUUID(),
       shapes: [],
       measurements: [],
+      image: undefined,
     });
   };
 
@@ -278,50 +279,50 @@ function CreateTechnicalSheet() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tolerância</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">XS</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">S</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">M</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">L</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">XL</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">XXL</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tolerância</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XS</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">S</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">M</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">L</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XL</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XXL</th>
+                  <th className="px-2 py-2"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 bg-white text-sm">
                 {currentPage.measurements.map((measurement) => (
-                  <tr key={measurement.id}>
-                    <td className="px-4 py-2">
+                  <tr key={measurement.id} className="text-sm">
+                    <td className="px-2 py-1">
                       <input
                         type="text"
                         value={measurement.code}
                         onChange={(e) => handleMeasurementChange(measurement.id, 'code', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        className="w-16 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-2 py-1">
                       <input
                         type="text"
                         value={measurement.description}
                         onChange={(e) => handleMeasurementChange(measurement.id, 'description', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-2 py-1">
                       <input
                         type="text"
                         value={measurement.tolerance}
-                        onChange={(e) => handleMeasurementChange(measurement.id, 'tolerance', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => handleMeasurementChange(measurement.id, 'tolerance', e.target.value )}
+                        className="w-16 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
                     </td>
                     {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((size) => (
-                      <td key={size} className="px-4 py-2">
+                      <td key={size} className="px-2 py-1">
                         <input
                           type="number"
                           value={measurement.sizes[size as keyof typeof measurement.sizes] || ''}
@@ -329,17 +330,17 @@ function CreateTechnicalSheet() {
                             const newSizes = { ...measurement.sizes, [size]: parseFloat(e.target.value) };
                             handleMeasurementChange(measurement.id, 'sizes', JSON.stringify(newSizes));
                           }}
-                          className="w-16 px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          className="w-12 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                         />
                       </td>
                     ))}
-                    <td className="px-4 py-2">
+                    <td className="px-2 py-1">
                       <button
                         type="button"
                         onClick={() => handleDeleteMeasurement(measurement.id)}
                         className="text-red-600 hover:text-red-800"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>

@@ -39,6 +39,7 @@ export interface Shape {
   color: string;
   text?: string;
   textColor?: string;
+  fontSize?: number;
 }
 
 export interface TechnicalSheetPage {
