@@ -30,13 +30,14 @@ export interface Measurement {
 export interface Shape {
   id: string;
   type: string;
-  path: string;
+  path?: string;
   isDashed?: boolean;
   x: number;
   y: number;
   width: number;
   height: number;
   color: string;
+  fill?: boolean;
   text?: string;
   textColor?: string;
   fontSize?: number;

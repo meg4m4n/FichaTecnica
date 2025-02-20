@@ -20,13 +20,12 @@ function CreateTechnicalSheet() {
     pieceTypeId: '',
   });
 
-  const [currentPage, setCurrentPage] = useState<TechnicalSheetPage>({
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [pages, setPages] = useState<TechnicalSheetPage[]>([{
     id: crypto.randomUUID(),
     shapes: [],
     measurements: [],
-  });
-
-  const [pages, setPages] = useState<TechnicalSheetPage[]>([]);
+  }]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -42,49 +41,69 @@ function CreateTechnicalSheet() {
       sizes: {},
     };
 
-    setCurrentPage((prev) => ({
-      ...prev,
-      measurements: [...prev.measurements, newMeasurement],
-    }));
+    const updatedPages = [...pages];
+    updatedPages[currentPageIndex].measurements = [
+      ...updatedPages[currentPageIndex].measurements,
+      newMeasurement,
+    ];
+    setPages(updatedPages);
   };
 
   const handleMeasurementChange = (id: string, field: keyof Measurement, value: string) => {
-    setCurrentPage((prev) => ({
-      ...prev,
-      measurements: prev.measurements.map((m) =>
-        m.id === id
-          ? {
-              ...m,
-              [field]: field === 'sizes' ? JSON.parse(value) : value,
-            }
-          : m
-      ),
-    }));
+    const updatedPages = [...pages];
+    updatedPages[currentPageIndex].measurements = updatedPages[currentPageIndex].measurements.map((m) =>
+      m.id === id
+        ? {
+            ...m,
+            [field]: field === 'sizes' ? JSON.parse(value) : value,
+          }
+        : m
+    );
+    setPages(updatedPages);
   };
 
   const handleDeleteMeasurement = (id: string) => {
-    setCurrentPage((prev) => ({
-      ...prev,
-      measurements: prev.measurements.filter((m) => m.id !== id),
-    }));
+    const updatedPages = [...pages];
+    updatedPages[currentPageIndex].measurements = updatedPages[currentPageIndex].measurements.filter(
+      (m) => m.id !== id
+    );
+    setPages(updatedPages);
   };
 
-  const handleAddPage = () => {
-    setPages((prev) => [...prev, currentPage]);
-    setCurrentPage({
+  const handleDuplicatePage = () => {
+    const currentPage = pages[currentPageIndex];
+    const newPage: TechnicalSheetPage = {
+      id: crypto.randomUUID(),
+      shapes: [...currentPage.shapes],
+      measurements: [...currentPage.measurements],
+      image: currentPage.image,
+    };
+    const updatedPages = [...pages];
+    updatedPages.splice(currentPageIndex + 1, 0, newPage);
+    setPages(updatedPages);
+    setCurrentPageIndex(currentPageIndex + 1);
+  };
+
+  const handleNewBlankPage = () => {
+    const newPage: TechnicalSheetPage = {
       id: crypto.randomUUID(),
       shapes: [],
       measurements: [],
-      image: undefined,
-    });
+    };
+    setPages([...pages, newPage]);
+    setCurrentPageIndex(pages.length);
   };
 
   const handleShapesChange = (shapes: Shape[]) => {
-    setCurrentPage((prev) => ({ ...prev, shapes }));
+    const updatedPages = [...pages];
+    updatedPages[currentPageIndex].shapes = shapes;
+    setPages(updatedPages);
   };
 
   const handleImageChange = (image: string) => {
-    setCurrentPage((prev) => ({ ...prev, image }));
+    const updatedPages = [...pages];
+    updatedPages[currentPageIndex].image = image;
+    setPages(updatedPages);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -94,15 +113,13 @@ function CreateTechnicalSheet() {
     const selectedPieceType = pieceTypes.find((p) => p.id === formData.pieceTypeId);
     
     if (!selectedClient || !selectedPieceType) return;
-
-    const allPages = [...pages, currentPage];
     
     const newTechnicalSheet = {
       id: crypto.randomUUID(),
       ...formData,
       client: selectedClient,
       pieceType: selectedPieceType,
-      pages: allPages,
+      pages,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -131,7 +148,7 @@ function CreateTechnicalSheet() {
         </div>
         <PDFExport
           technicalSheet={getTechnicalSheetData()}
-          currentPage={currentPage}
+          currentPage={pages[currentPageIndex]}
         />
       </div>
 
@@ -259,121 +276,128 @@ function CreateTechnicalSheet() {
           </div>
         </div>
 
-        <ImageEditor
-          shapes={currentPage.shapes}
-          onShapesChange={handleShapesChange}
-          onImageChange={handleImageChange}
-        />
+        {/* Page Navigation */}
+        <div className="flex items-center gap-2 mb-4">
+          {pages.map((_, index) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => setCurrentPageIndex(index)}
+              className={`px-4 py-2 rounded ${
+                currentPageIndex === index
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {index + 1}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={handleNewBlankPage}
+            className="p-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
 
+        {/* Current Page Content */}
         <div className="bg-white shadow-md rounded-lg p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Tabela de Medidas</h2>
+          <div className="flex justify-end gap-2 mb-4">
             <button
               type="button"
-              onClick={handleAddMeasurement}
-              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              onClick={handleDuplicatePage}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
             >
-              <Plus className="w-4 h-4 mr-1" />
-              Adicionar Medida
+              Duplicar Página
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tolerância</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XS</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">S</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">M</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">L</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XL</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">XXL</th>
-                  <th className="px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white text-sm">
-                {currentPage.measurements.map((measurement) => (
-                  <tr key={measurement.id} className="text-sm">
-                    <td className="px-2 py-1">
+          <ImageEditor
+            shapes={pages[currentPageIndex].shapes}
+            image={pages[currentPageIndex].image}
+            onShapesChange={handleShapesChange}
+            onImageChange={handleImageChange}
+          />
+
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Medidas</h3>
+              <button
+                type="button"
+                onClick={handleAddMeasurement}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar Medida
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {pages[currentPageIndex].measurements.map((measurement) => (
+                <div key={measurement.id} className="flex items-start gap-4 p-4 border rounded-lg">
+                  <div className="flex-1 grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
                       <input
                         type="text"
                         value={measurement.code}
                         onChange={(e) => handleMeasurementChange(measurement.id, 'code', e.target.value)}
-                        className="w-16 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
-                    </td>
-                    <td className="px-2 py-1">
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                       <input
                         type="text"
                         value={measurement.description}
-                        onChange={(e) => handleMeasurementChange(measurement.id, 'description', e.target.value)}
-                        className="w-full px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) =>
+                          handleMeasurementChange(measurement.id, 'description', e.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
-                    </td>
-                    <td className="px-2 py-1">
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tolerância
+                      </label>
                       <input
                         type="text"
                         value={measurement.tolerance}
-                        onChange={(e) => handleMeasurementChange(measurement.id, 'tolerance', e.target.value )}
-                        className="w-16 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) =>
+                          handleMeasurementChange(measurement.id, 'tolerance', e.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       />
-                    </td>
-                    {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((size) => (
-                      <td key={size} className="px-2 py-1">
-                        <input
-                          type="number"
-                          value={measurement.sizes[size as keyof typeof measurement.sizes] || ''}
-                          onChange={(e) => {
-                            const newSizes = { ...measurement.sizes, [size]: parseFloat(e.target.value) };
-                            handleMeasurementChange(measurement.id, 'sizes', JSON.stringify(newSizes));
-                          }}
-                          className="w-12 px-1 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </td>
-                    ))}
-                    <td className="px-2 py-1">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMeasurement(measurement.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMeasurement(measurement.id)}
+                    className="p-2 text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-between">
+        <div className="flex justify-end gap-4">
           <button
             type="button"
-            onClick={handleAddPage}
-            className="px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-md hover:bg-blue-50"
+            onClick={() => navigate('/')}
+            className="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
           >
-            Adicionar Página
+            Cancelar
           </button>
-
-          <div className="flex space-x-4">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-            >
-              Salvar
-            </button>
-          </div>
+          <button
+            type="submit"
+            className="px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          >
+            Salvar
+          </button>
         </div>
       </form>
     </div>

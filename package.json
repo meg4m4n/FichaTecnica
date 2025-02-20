@@ -22,7 +22,8 @@
     "react-cropper": "^2.3.3",
     "zustand": "^4.5.2",
     "perfect-freehand": "^1.2.0",
-    "roughjs": "^4.6.6"
+    "roughjs": "^4.6.6",
+    "cropperjs": "^1.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
