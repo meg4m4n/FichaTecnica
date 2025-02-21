@@ -11,7 +11,7 @@ function App() {
     <Router>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-[1920px]">
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/create-sheet" element={<CreateTechnicalSheet />} />
@@ -24,4 +24,4 @@ function App() {
   );
 }
 
-export default App;
+export default App

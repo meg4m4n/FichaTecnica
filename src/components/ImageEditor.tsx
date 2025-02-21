@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { restrictToParentElement } from '@dnd-kit/modifiers';
-import { Image as ImageIcon, Type, Square, Circle, ArrowRight, RotateCw, Move, Trash2, Copy, Plus } from 'lucide-react';
+import { Image as ImageIcon, Type, Square, Circle, ArrowRight, RotateCw, Trash2, X } from 'lucide-react';
 import Cropper from 'react-cropper';
 import 'cropperjs/dist/cropper.css';
 import { getStroke } from 'perfect-freehand';
@@ -12,15 +12,7 @@ interface ImageEditorProps {
   shapes: Shape[];
   onShapesChange: (shapes: Shape[]) => void;
   onImageChange: (image: string) => void;
-  onDuplicatePage?: () => void;
-  onNewBlankPage?: () => void;
 }
-
-// A4 dimensions in pixels at 96 DPI
-const A4_WIDTH = 794;
-const A4_HEIGHT = 1123;
-const EDITOR_HEIGHT = Math.round(A4_HEIGHT / 2);
-const EDITOR_WIDTH = A4_WIDTH;
 
 const roughGenerator = rough.generator();
 
@@ -121,20 +113,22 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
     switch (shape.type) {
       case 'text':
         return (
-          <textarea
-            value={shape.text || ''}
-            onChange={(e) => onUpdate(shape.id, { text: e.target.value })}
-            className="w-full h-full p-1 bg-transparent border-none resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            style={{ 
-              color: shape.color,
-              fontSize: `${shape.fontSize || 14}px`,
-              cursor: 'text',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-          />
+          <div 
+            className="w-full h-full relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <textarea
+              value={shape.text || ''}
+              onChange={(e) => onUpdate(shape.id, { text: e.target.value })}
+              className="w-full h-full p-2 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 border rounded"
+              style={{ 
+                color: shape.color,
+                fontSize: `${shape.fontSize || 14}px`,
+                lineHeight: '1.5',
+                fontFamily: 'Arial, sans-serif',
+              }}
+            />
+          </div>
         );
       case 'rectangle':
         return (
@@ -242,43 +236,55 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
           />
 
           {/* Controls */}
-          <div className="absolute -right-32 top-0 bg-white shadow-md rounded p-2 flex flex-col gap-2">
+          <div className="absolute -right-40 top-0 bg-white shadow-lg rounded-lg p-4 flex flex-col gap-3 min-w-[160px]">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Cor:</span>
+              <span className="text-sm text-gray-600">Cor:</span>
               <input
                 type="color"
                 value={shape.color}
                 onChange={(e) => onUpdate(shape.id, { color: e.target.value })}
-                className="w-6 h-6 cursor-pointer"
+                className="w-8 h-8 cursor-pointer rounded"
               />
             </div>
 
+            {shape.type === 'text' && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Tamanho:</span>
+                  <input
+                    type="number"
+                    value={shape.fontSize || 14}
+                    onChange={(e) => onUpdate(shape.id, { fontSize: Number(e.target.value) })}
+                    className="w-20 px-2 py-1 border rounded text-sm"
+                    min="8"
+                    max="72"
+                  />
+                </div>
+              </>
+            )}
+
             {shape.type !== 'text' && (
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1 text-xs text-gray-500">
+              <>
+                <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={shape.isDashed}
                     onChange={(e) => onUpdate(shape.id, { isDashed: e.target.checked })}
                     className="rounded text-blue-500"
                   />
-                  Tracejado
+                  <span className="text-sm text-gray-600">Tracejado</span>
                 </label>
-              </div>
-            )}
 
-            {shape.type === 'text' && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Fonte:</span>
-                <input
-                  type="number"
-                  value={shape.fontSize || 14}
-                  onChange={(e) => onUpdate(shape.id, { fontSize: Number(e.target.value) })}
-                  className="w-16 text-xs p-1 border rounded"
-                  min="8"
-                  max="72"
-                />
-              </div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={shape.fill}
+                    onChange={(e) => onUpdate(shape.id, { fill: e.target.checked })}
+                    className="rounded text-blue-500"
+                  />
+                  <span className="text-sm text-gray-600">Preenchimento</span>
+                </label>
+              </>
             )}
           </div>
         </>
@@ -287,16 +293,32 @@ function DraggableShape({ shape, onUpdate, selected, onSelect }: {
   );
 }
 
-function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, onNewBlankPage }: ImageEditorProps) {
+function ImageEditor({ shapes, onShapesChange, onImageChange }: ImageEditorProps) {
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-  const [imageRotation, setImageRotation] = useState(0);
-  const [imageScale, setImageScale] = useState(1);
   const [showCropper, setShowCropper] = useState(false);
+  const [imageRotation, setImageRotation] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cropperRef = useRef<any>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [editorDimensions, setEditorDimensions] = useState({ width: 0, height: 0 });
   
   const { setNodeRef } = useDroppable({ id: 'canvas' });
+
+  // Update editor dimensions on mount and window resize
+  React.useEffect(() => {
+    const updateDimensions = () => {
+      if (editorRef.current) {
+        const containerWidth = editorRef.current.offsetWidth;
+        const containerHeight = Math.min(window.innerHeight * 0.7, containerWidth * 0.75);
+        setEditorDimensions({ width: containerWidth, height: containerHeight });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, delta } = event;
@@ -317,8 +339,6 @@ function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, o
         const imageUrl = e.target?.result as string;
         setBackgroundImage(imageUrl);
         onImageChange(imageUrl);
-        setImageRotation(0);
-        setImageScale(1);
         setShowCropper(true);
       };
       reader.readAsDataURL(file);
@@ -339,20 +359,27 @@ function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, o
     setImageRotation((prev) => (prev + 90) % 360);
   };
 
+  const handleRemoveImage = () => {
+    setBackgroundImage(null);
+    onImageChange('');
+    setImageRotation(0);
+  };
+
   const addShape = (type: string) => {
     const newShape: Shape = {
       id: crypto.randomUUID(),
       type,
-      x: 50,
-      y: 50,
-      width: type === 'text' ? 150 : 100,
-      height: type === 'text' ? 40 : 100,
+      x: editorDimensions.width / 4,
+      y: editorDimensions.height / 4,
+      width: type === 'text' ? 200 : 100,
+      height: type === 'text' ? 100 : 100,
       color: '#000000',
-      text: type === 'text' ? 'Texto' : '',
-      fontSize: 14,
+      text: type === 'text' ? 'Digite seu texto aqui' : '',
+      fontSize: 16,
       rotation: 0,
       scale: 1,
       isDashed: false,
+      fill: false,
     };
     onShapesChange([...shapes, newShape]);
     setSelectedShape(newShape);
@@ -379,80 +406,55 @@ function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, o
   }, [handleKeyDown]);
 
   return (
-    <div className="bg-white shadow-sm rounded-lg p-4">
-      <div className="flex justify-between mb-4">
-        <div className="flex gap-2">
+    <div className="bg-white shadow-lg rounded-lg p-6" ref={editorRef}>
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Adicionar Imagem"
+            className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg flex items-center gap-2 transition-colors"
           >
-            <ImageIcon className="w-4 h-4" />
-            <span className="text-sm">Imagem</span>
+            <ImageIcon className="w-5 h-5" />
+            <span>Imagem</span>
           </button>
           <button
             onClick={() => addShape('text')}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Adicionar Texto"
+            className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg flex items-center gap-2 transition-colors"
           >
-            <Type className="w-4 h-4" />
-            <span className="text-sm">Texto</span>
+            <Type className="w-5 h-5" />
+            <span>Texto</span>
           </button>
           <button
             onClick={() => addShape('rectangle')}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Adicionar Retângulo"
+            className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg flex items-center gap-2 transition-colors"
           >
-            <Square className="w-4 h-4" />
-            <span className="text-sm">Retângulo</span>
+            <Square className="w-5 h-5" />
+            <span>Retângulo</span>
           </button>
           <button
             onClick={() => addShape('circle')}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Adicionar Círculo"
+            className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg flex items-center gap-2 transition-colors"
           >
-            <Circle className="w-4 h-4" />
-            <span className="text-sm">Círculo</span>
+            <Circle className="w-5 h-5" />
+            <span>Círculo</span>
           </button>
           <button
             onClick={() => addShape('arrow')}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Adicionar Seta"
+            className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg flex items-center gap-2 transition-colors"
           >
-            <ArrowRight className="w-4 h-4" />
-            <span className="text-sm">Seta</span>
-          </button>
-
-          {selectedShape && (
-            <button
-              onClick={deleteSelectedShape}
-              className="p-1.5 hover:bg-red-100 rounded flex items-center gap-1 text-red-600"
-              title="Excluir selecionado"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="text-sm">Excluir</span>
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={onDuplicatePage}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Duplicar página atual"
-          >
-            <Copy className="w-4 h-4" />
-            <span className="text-sm">Duplicar Conteúdo</span>
-          </button>
-          <button
-            onClick={onNewBlankPage}
-            className="p-1.5 hover:bg-gray-100 rounded flex items-center gap-1"
-            title="Nova página em branco"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Nova em Branco</span>
+            <ArrowRight className="w-5 h-5" />
+            <span>Seta</span>
           </button>
         </div>
+
+        {selectedShape && (
+          <button
+            onClick={deleteSelectedShape}
+            className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg flex items-center gap-2 transition-colors ml-auto"
+          >
+            <Trash2 className="w-5 h-5" />
+            <span>Excluir</span>
+          </button>
+        )}
       </div>
 
       <input
@@ -468,20 +470,25 @@ function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, o
           <Cropper
             ref={cropperRef}
             src={backgroundImage}
-            style={{ height: 400, width: '100%' }}
-            aspectRatio={16 / 9}
+            style={{ height: editorDimensions.height, width: '100%' }}
             guides={true}
+            viewMode={1}
+            dragMode="move"
+            autoCropArea={1}
+            cropBoxMovable={true}
+            cropBoxResizable={true}
+            toggleDragModeOnDblclick={false}
           />
           <div className="mt-4 flex justify-end gap-2">
             <button
               onClick={() => setShowCropper(false)}
-              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded"
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
             >
               Cancelar
             </button>
             <button
               onClick={handleCropComplete}
-              className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded"
+              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg"
             >
               Concluir Recorte
             </button>
@@ -496,32 +503,41 @@ function ImageEditor({ shapes, onShapesChange, onImageChange, onDuplicatePage, o
             ref={setNodeRef}
             className="relative mx-auto border border-dashed border-gray-300 rounded-lg overflow-hidden bg-gray-50"
             style={{
-              width: EDITOR_WIDTH,
-              height: EDITOR_HEIGHT,
+              width: editorDimensions.width,
+              height: editorDimensions.height,
             }}
             onClick={() => setSelectedShape(null)}
           >
             {backgroundImage && (
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `url(${backgroundImage})`,
-                  backgroundSize: 'contain',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat',
-                  transform: `rotate(${imageRotation}deg) scale(${imageScale})`,
-                  transformOrigin: 'center center',
-                }}
-              >
-                {backgroundImage && (
+              <div className="absolute inset-0">
+                <div
+                  className="w-full h-full"
+                  style={{
+                    backgroundImage: `url(${backgroundImage})`,
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    transform: `rotate(${imageRotation}deg)`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.2s ease-in-out',
+                  }}
+                />
+                <div className="absolute top-4 right-4 flex gap-2">
                   <button
                     onClick={handleImageRotate}
-                    className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-gray-100"
-                    title="Rotacionar imagem"
+                    className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-50"
+                    title="Rotacionar"
                   >
-                    <RotateCw className="w-4 h-4" />
+                    <RotateCw className="w-5 h-5" />
                   </button>
-                )}
+                  <button
+                    onClick={handleRemoveImage}
+                    className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-50 text-red-500"
+                    title="Remover imagem"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             )}
 
